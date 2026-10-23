@@ -1,0 +1,53 @@
+# --- секреты: никогда не коммитить ---
+secrets/
+.env
+*.env
+!.env.example
+*.key
+*.pem
+id_*
+
+# --- файлы доменов: только локально ---
+*/docs/
+*/inbox/
+tenders/tenders-vault/inbox/
+
+# --- личное Алии: содержимое дневника, входящих и текстов — только на её машине;
+#     описание папок (life/diary.md и т.д.) трекается ---
+life/diary/
+life/texts/
+
+# --- её рабочие файлы участия (банковские, доверенности, реквизиты) — вне git,
+#     markdown-разбор рядом трекается ---
+tenders/сервис/*
+!tenders/сервис/*.md
+
+# --- тяжёлые файлы верха: только локально; описание — meta-vault/documents.md ---
+documents/
+
+# --- старые вложенные клоны на её машине (до 22.10 жили внутри tenders/):
+#     база агента влита сюда, платформа курса ведётся отдельно ---
+tenders/course-platform/
+tenders/tender-agent/
+
+# --- снимок вики портала: 71 МБ картинок, текст снимка в git есть ---
+transit/goszakup-wiki-2026-08-05/images/
+
+# --- черновое при базе, в git не идёт ---
+scratch/
+
+# --- ОС / редакторы ---
+.DS_Store
+.obsidian/
+
+# --- сессии мессенджеров ---
+*.session
+*.session-journal
+
+# --- код ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+map/tsconfig.tsbuildinfo
