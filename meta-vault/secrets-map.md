@@ -1,6 +1,6 @@
 ---
 title: Secrets map — где живут доступы (без значений) + контракт secrets/
-updated: 2026-10-10
+updated: 2026-10-23
 type: reference
 status: active
 sensitivity: normal
@@ -29,7 +29,7 @@ tags: [secrets, security, access]
 
 | Файл | Что | Потребители |
 |---|---|---|
-| _(пусто — `tokens.md`, `passwords.md` появляются по мере надобности)_ | | |
+| `goszakup-token` | токен унифицированных сервисов портала госзакупок (одна строка; выпуск — кабинет портала → Профиль участника → Выпуск токена; срок год; привязан к IP при выпуске) | `engine/scripts/ows.py` (или переменная среды `GOSZAKUP_TOKEN`) — памятка `tenders/tenders-vault/tools/ows-api.md` |
 
 ## Уровень проекта
 

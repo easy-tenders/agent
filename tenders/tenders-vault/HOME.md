@@ -17,7 +17,7 @@
 | `tenders/people/` | люди со стороны заказчиков и конкурентов |
 | `tenders/reference/` | [[tenders/reference/glossary\|термины]] · [[margin-calc\|расчёт маржи]] |
 | `tenders/tenders-vault/operations/` | операции раздела |
-| `tenders/tenders-vault/tools/` | памятки: [[goszakup]] · [[tenders/tenders-vault/tools/mcp\|mcp]] · [[tenders/tenders-vault/tools/portal\|portal]] |
+| `tenders/tenders-vault/tools/` | памятки: [[goszakup]] (сайт, HTML) · [[tenders/tenders-vault/tools/ows-api\|ows-api]] (API по токену) · [[tenders/tenders-vault/tools/mcp\|mcp]] · [[tenders/tenders-vault/tools/portal\|portal]] |
 | `tenders/tenders-vault/workflow.md` | метод разбора позиции по ТЗ |
 | `tenders/tenders-vault/inbox/` | выгрузки (дамп GPT), вне git |
 
