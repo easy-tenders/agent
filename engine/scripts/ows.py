@@ -16,7 +16,7 @@ tenders/tenders-vault/tools/ows-api.md. Внешних библиотек не �
   ows.py lots <слово> [опции]          — открытые лоты по слову (название + описание,
                                          с морфологией); таблица + JSON в кэш
         --status 210,220,240             статусы лота (по умолчанию открытые)
-        --kato 35                        место поставки, начало кода КАТО (35 = Карагандинская обл.)
+        --kato 35                        место поставки, начало кода КАТО (35 = Карагандинская обл.); режется после выдачи
         --min 500000                     сумма лота от
         --all                            все статусы (история)
   ows.py lot <id>                      — лот подробно: объявление, заказчик, документы
@@ -280,6 +280,47 @@ def text_filter(word):
     return "*" + w
 
 
+def search_lots(f, word, limit=None):
+    """Поиск с морфологией по названию и описанию; портал глух к редким словам
+    («гидротехнические» → 0) — тогда повтор подстрокой по названию (`?слово`),
+    по первым 7 буквам каждого слова. Возвращает (лоты, всего, режим)."""
+    lots, total = gql_all("Lots", Q_LOTS, {"filter": f}, limit=limit)
+    if lots or word.strip()[:1] in "*?":
+        return lots, total, "морфология"
+    stems = [w[:7].lower() for w in word.split() if len(w) > 2] or [word.lower()]
+    f2 = dict(f); f2.pop("nameDescriptionRu", None); f2["nameRu"] = "?" + stems[0]
+    lots, total = gql_all("Lots", Q_LOTS, {"filter": f2}, limit=limit)
+    if len(stems) > 1:   # остальные слова — по названию и описанию, у себя
+        lots = [l for l in lots if all(s in ((l.get("nameRu") or "") + " " + (l.get("descriptionRu") or "")).lower() for s in stems[1:])]
+    return lots, len(lots), f"подстрока «{stems[0]}» в названии лота" + (f" + {stems[1:]} в тексте" if len(stems) > 1 else "")
+
+
+Q_TB = """query($limit:Int,$after:Int,$filter:TrdBuyFiltersInput){ TrdBuy(limit:$limit, after:$after, filter:$filter){
+  id numberAnno nameRu totalSum startDate endDate publishDate refBuyStatusId customerNameRu orgNameRu kato
+  RefTradeMethods { nameRu } } }"""
+
+
+def announcements(word, since="2026-01-01"):
+    """Работы и услуги часто названы в объявлении, а не в лоте: ищем подстрокой по
+    названию объявления, остальные слова — у себя. Возвращает объявления, у которых
+    приём ещё идёт."""
+    stems = [w[:7].lower() for w in word.split() if len(w) > 2] or [word.lower()]
+    items, _ = gql_all("TrdBuy", Q_TB, {"filter": {"nameRu": "?" + stems[0], "lastUpdateDate": [since]}}, limit=1000)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    out = [t for t in items if all(s in (t.get("nameRu") or "").lower() for s in stems[1:])
+           and (t.get("endDate") or "") >= now]
+    out.sort(key=lambda t: (t.get("endDate") or "", -(t.get("totalSum") or 0)))
+    return out
+
+
+def print_announcements(items):
+    print(f"\nобъявления с таким названием, приём идёт: {len(items)}")
+    for t in items:
+        print(f"{t.get('numberAnno'):<13} {money(t.get('totalSum')):>14} ₸  до {date_short(t.get('endDate')):<16} "
+              f"{((t.get('RefTradeMethods') or {}).get('nameRu') or '—')[:22]:<22} КАТО {','.join(t.get('kato') or [])[:11]:<11} "
+              f"{(t.get('customerNameRu') or t.get('orgNameRu') or '—')[:40]} · {(t.get('nameRu') or '')[:90]}")
+
+
 def cmd_check(args):
     try:
         payload = gql("query($limit:Int){ Lots(limit:$limit){ id } }", {"limit": 1})
@@ -295,21 +336,26 @@ def cmd_lots(args):
     f = {"nameDescriptionRu": text_filter(args.word)}
     if not getattr(args, "all", False):
         f["refLotStatusId"] = [int(s) for s in args.status.split(",")]
-    if args.kato:
-        f["plnPointKatoList"] = args.kato
     if args.min:
         f["amount"] = [float(args.min)]
-    lots, total = gql_all("Lots", Q_LOTS, {"filter": f})
+    lots, total, mode = search_lots(f, args.word)
+    if args.kato:   # портал фильтрует КАТО только по точному коду — режем по началу сами
+        lots = [l for l in lots if any(str(k).startswith(args.kato) for k in (l.get("plnPointKatoList") or []))]
     rows = lot_rows(lots)
     live = [r for r in rows if not expired(r)] if not getattr(args, "all", False) else rows
     gone = len(rows) - len(live)
     avail = [r for r in live if not r["single"]]
     single = [r for r in live if r["single"]]
-    print(f"лотов по «{args.word}» в выдаче портала: {total if total is not None else len(rows)}; "
-          f"получено {len(rows)}; срок приёма прошёл — {gone}")
+    print(f"лотов по «{args.word}» в выдаче портала: {total if total is not None else len(rows)} ({mode}); "
+          f"получено {len(rows)}" + (f", в регионе {args.kato}* — {len(lots)}" if args.kato else "") + f"; срок приёма прошёл — {gone}")
     print_lots(avail, "доступные")
     print_lots(single, "из одного источника — участвовать нельзя, показываем отдельно")
-    f_out = cache_write("lots_" + "".join(c for c in args.word if c.isalnum())[:30], lots)
+    anns = announcements(args.word)
+    if args.kato:
+        anns = [t for t in anns if any(str(k).startswith(args.kato) for k in (t.get("kato") or []))]
+    if anns:
+        print_announcements(anns)
+    f_out = cache_write("lots_" + "".join(c for c in args.word if c.isalnum())[:30], {"lots": lots, "announcements": anns})
     print(f"\nданные лотов: {f_out}")
     return 0
 
@@ -367,11 +413,11 @@ def cmd_won(args):
     f = {"nameDescriptionRu": text_filter(args.word)}
     if args.year:
         f["lastUpdateDate"] = [f"{args.year}-01-01", f"{args.year}-12-31"]
+    lots, total, mode = search_lots(f, args.word, limit=args.limit)
     if args.kato:
-        f["plnPointKatoList"] = args.kato
-    lots, total = gql_all("Lots", Q_LOTS, {"filter": f}, limit=args.limit)
+        lots = [l for l in lots if any(str(k).startswith(args.kato) for k in (l.get("plnPointKatoList") or []))]
     ids = sorted({l["trdBuyId"] for l in lots if l.get("trdBuyId")})
-    print(f"лотов по «{args.word}»: {total}; взято {len(lots)}, объявлений {len(ids)}")
+    print(f"лотов по «{args.word}»: {total} ({mode}); взято {len(lots)}, объявлений {len(ids)}")
     contracts = []
     for i in range(0, len(ids), 50):
         part, _ = _contracts({"trdBuyId": ids[i:i + 50]})
