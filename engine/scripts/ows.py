@@ -20,6 +20,8 @@ tenders/tenders-vault/tools/ows-api.md. Внешних библиотек не �
         --min 500000                     сумма лота от
         --all                            все статусы (история)
   ows.py lot <id>                      — лот подробно: объявление, заказчик, документы
+  ows.py docs <id> [--to папка]        — документы лота и его объявления (техспецификация,
+                                         проект договора) в папку; дальше extract_docs.py
   ows.py won <слово> [--year 2025]     — кто выигрывал: договоры по лотам с этим словом
   ows.py contracts --customer <БИН> | --supplier <БИН> [--year 2025]
   ows.py plans <слово> [--year 2026] [--bin <БИН заказчика>] — пункты годовых планов
@@ -389,6 +391,60 @@ def cmd_lot(args):
     return 0
 
 
+Q_TB_FILES = """query($limit:Int,$after:Int,$filter:TrdBuyFiltersInput){ TrdBuy(limit:$limit, after:$after, filter:$filter){
+  id numberAnno nameRu Files { nameRu originalName filePath } } }"""
+
+
+def _download(url, dest):
+    """Файл по ссылке из API. Документы лежат открыто — без токена (проверено 23.10)."""
+    global _last
+    wait = PAUSE - (time.monotonic() - _last)
+    if wait > 0:
+        time.sleep(wait)
+    req = urllib.request.Request(url, headers={"User-Agent": "easy-tender-agent/ows.py"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            dest.write_bytes(resp.read())
+    except (urllib.error.URLError, OSError) as e:
+        print(f"  не скачалось: {url} — {e}", file=sys.stderr)
+        return False
+    finally:
+        _last = time.monotonic()
+    return dest.stat().st_size > 0
+
+
+def cmd_docs(args):
+    """Документы лота и его объявления: у лота лежит техспецификация, у объявления —
+    она же и проект договора. Папка — аргумент или временная папка прогона."""
+    lots, _ = gql_all("Lots", Q_LOT, {"filter": {"id": [int(args.id)]}}, limit=1)
+    if not lots:
+        print("лот не найден")
+        return 1
+    l = lots[0]
+    files = list(l.get("Files") or [])
+    if l.get("trdBuyId"):
+        tbs, _ = gql_all("TrdBuy", Q_TB_FILES, {"filter": {"id": [int(l["trdBuyId"])]}}, limit=1)
+        for tb in tbs:
+            files.extend(tb.get("Files") or [])
+    import tempfile
+    out = Path(args.to) if args.to else (Path(tempfile.gettempdir()) / "tender-agent" / "ows"
+                                         / f"docs_{l.get('lotNumber')}")
+    out.mkdir(parents=True, exist_ok=True)
+    seen, got = set(), 0
+    for f in files:
+        name = Path(f.get("originalName") or Path(f.get("filePath") or "").name).name
+        if not f.get("filePath") or not name or name in seen:
+            continue
+        seen.add(name)
+        dest = out / name
+        ok = (dest.exists() and dest.stat().st_size > 0) or _download(f["filePath"], dest)
+        got += bool(ok)
+        print(f"  {'+' if ok else '-'} {f.get('nameRu')}: {name}")
+    print(f"документы лота {l.get('lotNumber')}: {got} из {len(seen)} → {out}")
+    print(f"текст из них: python3 engine/scripts/extract_docs.py \"{out}\"  (ляжет в {out / '_text'})")
+    return 0 if seen and got == len(seen) else 1
+
+
 def _contracts(filter_, limit=None):
     try:
         return gql_all("Contract", Q_CONTRACTS, {"filter": filter_}, limit=limit)
@@ -570,6 +626,7 @@ def main(argv=None):
     p.add_argument("--status", default=",".join(map(str, OPEN_STATUSES)))
     p.add_argument("--kato"); p.add_argument("--min"); p.add_argument("--all", action="store_true")
     p = sub.add_parser("lot"); p.add_argument("id")
+    p = sub.add_parser("docs"); p.add_argument("id"); p.add_argument("--to")
     p = sub.add_parser("won"); p.add_argument("word"); p.add_argument("--year")
     p.add_argument("--kato"); p.add_argument("--limit", type=int, default=400)
     p = sub.add_parser("contracts"); p.add_argument("--customer"); p.add_argument("--supplier")

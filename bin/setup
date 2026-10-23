@@ -59,5 +59,9 @@ else
 fi
 
 mkdir -p secrets
+if [ ! -s secrets/goszakup-token ]; then
+  echo "токен портала не положен: secrets/goszakup-token (одна строка; откуда взять — meta-vault/secrets-map.md)."
+  echo "  без него поиск лотов идёт по сайту портала, медленнее; проверка — python3 engine/scripts/ows.py check"
+fi
 "$PY" bin/check --quiet || echo "bin/check нашёл, что поправить — запусти без --quiet"
 echo "готово"

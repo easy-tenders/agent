@@ -138,6 +138,10 @@ def main():
     if not git:
         print('  git: нет — секреты в индексе не проверены')
     print(f'  пометок <настрой> осталось: {todo}')
+    tok = os.path.join(ROOT, 'secrets', 'goszakup-token')
+    print('  токен портала (secrets/goszakup-token): '
+          + ('есть' if os.path.isfile(tok) and os.path.getsize(tok) > 0
+             else 'нет — поиск пойдёт по сайту; где взять: meta-vault/secrets-map.md'))
     sys.exit(1 if any(items for _, items in rows) else 0)
 
 

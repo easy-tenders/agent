@@ -67,6 +67,10 @@ if ((Test-Path 'engine\pyproject.toml') -or (Test-Path 'engine\requirements.txt'
 }
 
 New-Item -ItemType Directory -Force -Path 'secrets' | Out-Null
+if (-not (Test-Path 'secrets\goszakup-token') -or (Get-Item 'secrets\goszakup-token').Length -eq 0) {
+  Write-Host 'токен портала не положен: secrets\goszakup-token (одна строка; откуда взять - meta-vault/secrets-map.md).'
+  Write-Host '  без него поиск лотов идёт по сайту портала, медленнее; проверка - py engine\scripts\ows.py check'
+}
 & $py bin\check --quiet
 if ($LASTEXITCODE -ne 0) { Write-Host 'bin\check нашёл, что поправить - запустите без --quiet' }
 Write-Host 'готово'
